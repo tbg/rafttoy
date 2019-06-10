@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/nvanbenschoten/rafttoy/storage/wal"
 	"log"
 	"net"
 	"net/http"
@@ -29,15 +30,15 @@ func newPeer(cfg peer.Config) *peer.Peer {
 
 	// Storage.
 	//  WAL.
-	// w := wal.NewMem()
+	w := wal.NewMem()
 	// w := engine.NewPebble(*dataDir, false).(wal.Wal)
 	// w := wal.NewEtcdWal(*dataDir)
 	//  Engine.
-	// e := engine.NewMem()
+	e := engine.NewMem()
 	// e := engine.NewPebble(*dataDir, false)
 	//  Combined.
-	// s := storage.CombineWalAndEngine(w, e)
-	s := engine.NewPebble(*dataDir, false).(storage.Storage)
+	s := storage.CombineWalAndEngine(w, e)
+	// s := engine.NewPebble(*dataDir, false).(storage.Storage)
 
 	// Transport.
 	t := transport.NewGRPC()
