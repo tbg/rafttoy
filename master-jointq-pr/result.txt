@@ -1,0 +1,5 @@
+name                        old time/op    new time/op    delta
+Raft/conc=256/bytes=256-16    3.05µs ± 6%    3.07µs ± 1%   ~     (p=0.700 n=3+3)
+
+name                        old speed      new speed      delta
+Raft/conc=256/bytes=256-16  84.0MB/s ± 6%  83.3MB/s ± 1%   ~     (p=0.700 n=3+3)

@@ -1,0 +1,6 @@
+Syncing...
+Refreshing DNS entries...
+tobias-raft: [aws] 9h1m25s remaining
+  tobias-raft-0001	ip-10-12-45-41.us-east-2.compute.internal	10.12.45.41	18.219.54.21
+  tobias-raft-0002	ip-10-12-47-252.us-east-2.compute.internal	10.12.47.252	3.16.37.87
+  tobias-raft-0003	ip-10-12-39-174.us-east-2.compute.internal	10.12.39.174	18.223.164.5

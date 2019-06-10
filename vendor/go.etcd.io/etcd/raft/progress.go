@@ -14,7 +14,12 @@
 
 package raft
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+
+	"go.etcd.io/etcd/raft/quorum"
+)
 
 const (
 	ProgressStateProbe ProgressStateType = iota
@@ -282,4 +287,171 @@ func (in *inflights) full() bool {
 func (in *inflights) reset() {
 	in.count = 0
 	in.start = 0
+}
+
+// progressTracker tracks the currently active configuration and the information
+// known about the nodes and learners in it. In particular, it tracks the match
+// index for each peer which in turn allows reasoning about the committed index.
+type progressTracker struct {
+	voters   quorum.JointConfig
+	learners map[uint64]struct{}
+	prs      map[uint64]*Progress
+
+	votes map[uint64]bool
+
+	maxInflight int
+}
+
+func makeProgressTracker(maxInflight int) progressTracker {
+	p := progressTracker{
+		maxInflight: maxInflight,
+		voters: quorum.JointConfig{
+			quorum.MajorityConfig{},
+			quorum.MajorityConfig{},
+		},
+		learners: map[uint64]struct{}{},
+		votes:    map[uint64]bool{},
+		prs:      map[uint64]*Progress{},
+	}
+	return p
+}
+
+// isSingleton returns true if (and only if) there is only one voting member
+// (i.e. the leader) in the current configuration.
+func (p *progressTracker) isSingleton() bool {
+	return len(p.voters[0]) == 1 && len(p.voters[1]) == 0
+}
+
+type matchLookuper map[uint64]*Progress
+
+var _ quorum.IndexLookuper = matchLookuper(nil)
+
+func (l matchLookuper) Index(id uint64) (uint64, bool) {
+	pr, ok := l[id]
+	if !ok {
+		return 0, false
+	}
+	return pr.Match, true
+}
+
+// committed returns the largest log index known to be committed based on what
+// the voting members of the group have acknowledged.
+func (p *progressTracker) committed() uint64 {
+	return p.voters.CommittedIndex(matchLookuper(p.prs)).Definitely
+}
+
+func (p *progressTracker) removeAny(id uint64) {
+	_, okPR := p.prs[id]
+	_, okV1 := p.voters[0][id]
+	_, okV2 := p.voters[1][id]
+	_, okL := p.learners[id]
+
+	okV := okV1 || okV2
+
+	if !okPR {
+		panic("attempting to remove unknown peer %x")
+	} else if !okV && !okL {
+		panic("attempting to remove unknown peer %x")
+	} else if okV && okL {
+		panic(fmt.Sprintf("peer %x is both voter and learner", id))
+	}
+
+	delete(p.voters[0], id)
+	delete(p.voters[1], id)
+	delete(p.learners, id)
+	delete(p.prs, id)
+}
+
+// initProgress initializes a new progress for the given node or learner. The
+// node may not exist yet in either form or a panic will ensue.
+func (p *progressTracker) initProgress(id, match, next uint64, isLearner bool) {
+	if pr := p.prs[id]; pr != nil {
+		panic(fmt.Sprintf("peer %x already tracked as node %v", id, pr))
+	}
+	if !isLearner {
+		p.voters[0][id] = struct{}{}
+	} else {
+		p.learners[id] = struct{}{}
+	}
+	p.prs[id] = &Progress{Next: next, Match: match, ins: newInflights(p.maxInflight), IsLearner: isLearner}
+}
+
+func (p *progressTracker) getProgress(id uint64) *Progress {
+	return p.prs[id]
+}
+
+// visit invokes the supplied closure for all tracked progresses.
+func (p *progressTracker) visit(f func(id uint64, pr *Progress)) {
+	for id, pr := range p.prs {
+		f(id, pr)
+	}
+}
+
+// checkQuorumActive returns true if the quorum is active from
+// the view of the local raft state machine. Otherwise, it returns
+// false.
+func (p *progressTracker) quorumActive() bool {
+	votes := map[uint64]bool{}
+	p.visit(func(id uint64, pr *Progress) {
+		if pr.IsLearner {
+			return
+		}
+		votes[id] = pr.RecentActive
+	})
+
+	return p.voters.VoteResult(votes) == quorum.VoteWon
+}
+
+func (p *progressTracker) voterNodes() []uint64 {
+	m := p.voters.IDs()
+	nodes := make([]uint64, 0, len(m))
+	for id := range m {
+		nodes = append(nodes, id)
+	}
+	sort.Sort(uint64Slice(nodes))
+	return nodes
+}
+
+func (p *progressTracker) learnerNodes() []uint64 {
+	nodes := make([]uint64, 0, len(p.learners))
+	for id := range p.learners {
+		nodes = append(nodes, id)
+	}
+	sort.Sort(uint64Slice(nodes))
+	return nodes
+}
+
+// resetVotes prepares for a new round of vote counting via recordVote.
+func (p *progressTracker) resetVotes() {
+	p.votes = map[uint64]bool{}
+}
+
+// recordVote records that the node with the given id voted for this Raft
+// instance if v == true (and declined it otherwise).
+func (p *progressTracker) recordVote(id uint64, v bool) {
+	_, ok := p.votes[id]
+	if !ok {
+		p.votes[id] = v
+	}
+}
+
+// tallyVotes returns the number of granted and rejected votes, and whether the
+// election outcome is known.
+func (p *progressTracker) tallyVotes() (granted int, rejected int, _ quorum.VoteResult) {
+	// Make sure to populate granted/rejected correctly even if the votes slice
+	// contains members no longer part of the configuration. This doesn't really
+	// matter in the way the numbers are used (they're informational), but might
+	// as well get it right.
+	for id, pr := range p.prs {
+		if pr.IsLearner {
+			continue
+		}
+		if p.votes[id] {
+			granted++
+		} else {
+			rejected++
+		}
+	}
+	result := p.voters.VoteResult(p.votes)
+	return granted, rejected, result
 }

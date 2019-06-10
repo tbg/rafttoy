@@ -1,0 +1,19 @@
+go test -c -mod=vendor -o rafttoy-leader
+go build   -mod=vendor -o rafttoy-follower
+tobias-raft: stopping and waiting.
+tobias-raft: putting (dist) rafttoy-follower rafttoy-follower
+.
+   2: done
+tobias-raft: putting (dist) rafttoy-follower rafttoy-follower
+.
+   3: done
+tobias-raft: putting (dist) rafttoy-leader rafttoy-leader
+..
+   1: done
+goos: linux
+goarch: amd64
+pkg: github.com/nvanbenschoten/rafttoy
+BenchmarkRaft/conc=256/bytes=256-16         	 1000000	      3244 ns/op	  78.90 MB/s
+BenchmarkRaft/conc=256/bytes=256-16         	 1000000	      2883 ns/op	  88.77 MB/s
+BenchmarkRaft/conc=256/bytes=256-16         	 1000000	      3034 ns/op	  84.35 MB/s
+PASS

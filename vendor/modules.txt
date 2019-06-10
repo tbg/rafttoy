@@ -50,10 +50,11 @@ github.com/prometheus/procfs/internal/util
 github.com/rcrowley/go-metrics
 # github.com/spf13/pflag v1.0.3
 github.com/spf13/pflag
-# go.etcd.io/etcd v0.0.0-20190417191421-cd7ffbe2270d
+# go.etcd.io/etcd v0.0.0-20190417191421-cd7ffbe2270d => /go/src/go.etcd.io/etcd
 go.etcd.io/etcd/raft
 go.etcd.io/etcd/raft/raftpb
 go.etcd.io/etcd/wal
+go.etcd.io/etcd/raft/quorum
 go.etcd.io/etcd/pkg/crc
 go.etcd.io/etcd/pkg/fileutil
 go.etcd.io/etcd/pkg/ioutil
